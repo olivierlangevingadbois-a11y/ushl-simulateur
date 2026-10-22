@@ -11,7 +11,10 @@ name: Matchs de la ligue
 # Le champ « archive » importe une fois les séries d'une saison archivée sur ushl.ca (ex. USHL21).
 on:
   schedule:
-    - cron: '*/20 21-23,0-5 * * *'   # aux 20 minutes de 17 h à 2 h à Québec (16 h à 1 h en hiver)
+    # Minutes décalées (13, 33, 53) plutôt que 0, 20, 40 : GitHub retarde ou saute souvent les passages
+    # prévus aux minutes rondes, les plus achalandées. Un passage peut quand même manquer : le bouton
+    # « Run workflow » reste le moyen le plus sûr juste après une simulation.
+    - cron: '13,33,53 21-23,0-5 * * *'   # aux 20 minutes de 17 h à 2 h à Québec (16 h à 1 h en hiver)
     - cron: '7 8,12,16 * * *'        # trois vérifications de jour, au cas où une simulation tomberait ailleurs
   workflow_dispatch:
     inputs:

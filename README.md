@@ -94,6 +94,8 @@ Le workflow `.github/workflows/matchs.yml` lance `scripts/recuperer.js` :
 - aux 20 minutes de 17 h à 2 h (heure de Québec, une heure plus tôt en hiver) et trois fois de jour;
 - à la demande : onglet **Actions**, **Matchs de la ligue**, bouton **Run workflow**, par exemple juste après une simulation.
 
+GitHub ne garantit pas l'heure des passages prévus : en période achalandée, il les retarde ou en saute (certains soirs, à peine un passage aux deux heures). Si les matchs d'une soirée n'apparaissent pas, le bouton **Run workflow** les récupère en moins d'une minute.
+
 À chaque passage :
 
 1. Le calendrier de la saison (`USHL22Schedule.html`) est demandé au serveur avec la date de la dernière version lue. Tant que la ligue ne publie rien, le serveur répond « rien de neuf » et rien n'est téléchargé. Les calendriers des séries ne sont consultés qu'une fois la saison terminée.
