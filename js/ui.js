@@ -45,9 +45,18 @@ function initUI(){
   $("clearLines").onclick=()=>{linesIn.value="";$("linesNote").textContent="";linesIn.focus()};
   $("snapLines").onclick=()=>useSnapshot(false);
   $("go").onclick=start;
-  const showSetup=()=>{playing=false;updatePlayIcon();$("game").hidden=true;$("setup").hidden=false;$("newGame").hidden=true;$("share").hidden=true;window.scrollTo(0,0)};
+  const showSetup=()=>{playing=false;updatePlayIcon();pushed=false;$("game").hidden=true;$("setup").hidden=false;$("newGame").hidden=true;$("share").hidden=true;window.scrollTo(0,0)};
+  // Retour à l'accueil : bouton Accueil, titre du site ou bouton Précédent du navigateur.
+  // Un match ouvert depuis l'accueil a sa propre entrée dans l'historique : on y revient en arrière.
   // history.replaceState échoue sur une page ouverte depuis le disque (file://) : on s'en passe alors.
-  $("newGame").onclick=()=>{showSetup();if(location.hash) try{history.replaceState(null,"",location.pathname+location.search)}catch(err){}};
+  let pushed=false;
+  const goHome=()=>{
+    if(pushed){pushed=false;try{history.back();return}catch(err){}}
+    showSetup();if(location.hash) try{history.replaceState(null,"",location.pathname+location.search)}catch(err){}
+  };
+  $("newGame").onclick=goHome;
+  $("home").onclick=e=>{if($("game").hidden)return;e.preventDefault();goHome()};
+  window.addEventListener("popstate",()=>{if(!$("game").hidden&&!/^#(match|m)=/.test(location.hash))showSetup()});
   $("share").onclick=shareLink;
   $("gamePick").onchange=e=>{const x=games[+e.target.value];play(x,curL);if(x.id&&location.hash!=="#match="+x.id)try{history.replaceState(null,"","#match="+x.id)}catch(err){}};
 
@@ -116,6 +125,7 @@ function initUI(){
     }catch(e){console.error(e);showSetup();$("err").textContent="Ce lien de partage est invalide ou incomplet."}
   }
   function setupGame(){
+    if(!$("setup").hidden&&!location.hash) try{history.pushState(null,"",location.href);pushed=true}catch(err){}
     $("setup").hidden=true;$("game").hidden=false;$("newGame").hidden=false;$("share").hidden=false;
     SIDES.forEach(s=>{
       const tm=G.team[s], cap=s==="away"?"Away":"Home";
