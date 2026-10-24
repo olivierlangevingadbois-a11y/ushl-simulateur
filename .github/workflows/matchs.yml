@@ -4,17 +4,23 @@ name: Matchs de la ligue
 #
 # Le script ne fait que des requêtes conditionnelles (If-Modified-Since) : tant que la ligue ne
 # publie rien, ushl.ca répond « 304, rien de neuf » et rien n'est téléchargé ni commité.
-# Une simulation publiée est lue au plus tard une vingtaine de minutes après sa mise en ligne
-# (10 minutes d'attente pour laisser finir le téléversement, puis le passage suivant).
+#
+# Veille du soir : GitHub saute la plupart des passages programmés (à peine quatre par jour certains
+# jours, au lieu d'un aux 20 minutes). Un passage lancé le soir reste donc ouvert et revérifie aux
+# 5 minutes jusqu'à 3 h (heure de Québec). Une tâche GitHub dure au plus 6 heures : avant la limite,
+# la veille relance elle-même la suivante. Les passages programmés ne servent plus qu'à la démarrer
+# (plusieurs fois, au cas où GitHub en sauterait) et aux vérifications de jour. Dépôt public : les
+# minutes d'Actions sont gratuites.
+# Une simulation publiée est lue une dizaine de minutes après sa mise en ligne (10 minutes d'attente
+# pour laisser finir le téléversement, puis le passage suivant).
 #
 # Bouton « Run workflow » de l'onglet Actions : passage immédiat, par exemple juste après une simulation.
+# Le soir, il démarre aussi la veille si elle ne tourne pas déjà.
 # Le champ « archive » importe une fois les séries d'une saison archivée sur ushl.ca (ex. USHL21).
 on:
   schedule:
-    # Minutes décalées (13, 33, 53) plutôt que 0, 20, 40 : GitHub retarde ou saute souvent les passages
-    # prévus aux minutes rondes, les plus achalandées. Un passage peut quand même manquer : le bouton
-    # « Run workflow » reste le moyen le plus sûr juste après une simulation.
-    - cron: '13,33,53 21-23,0-5 * * *'   # aux 20 minutes de 17 h à 2 h à Québec (16 h à 1 h en hiver)
+    - cron: '13 20,21,22,23 * * *'   # démarre la veille (16 h ou 17 h à Québec selon la saison)
+    - cron: '43 1,4 * * *'           # au cas où GitHub aurait sauté les précédents
     - cron: '7 8,12,16 * * *'        # trois vérifications de jour, au cas où une simulation tomberait ailleurs
   workflow_dispatch:
     inputs:
@@ -22,11 +28,18 @@ on:
         description: "Importer les séries d'une saison archivée (ex. USHL21). Laisser vide pour un passage normal."
         required: false
         default: ""
+      relais:
+        description: "Usage interne : relance de la veille par elle-même."
+        required: false
+        default: ""
 
 permissions:
   contents: write
   pages: write
+  actions: write
 
+# Une seule veille à la fois : un passage programmé qui arrive pendant la veille attend son tour,
+# puis ne fait qu'un passage s'il arrive après 3 h.
 concurrency:
   group: matchs-de-la-ligue
   cancel-in-progress: false
@@ -34,7 +47,7 @@ concurrency:
 jobs:
   recuperer:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 355
     steps:
       # La branche telle qu'elle est au moment du passage (et non au moment où il a été mis en file) :
       # un passage qui attendait derrière un autre part de ce que le précédent vient de publier.
@@ -48,36 +61,65 @@ jobs:
 
       # Page de vérification anti-robot, site en panne ou qui ne répond plus : avertissement sans échec,
       # ce qui a été récupéré est gardé et le passage suivant reprend le reste. Une page inattendue
-      # (format FHL changé, par exemple) met le passage en échec.
+      # (format FHL changé, par exemple) met la tâche en échec à la fin de la veille.
       - name: Récupérer les nouveaux matchs
-        id: recup
         env:
           ARCHIVE: ${{ github.event.inputs.archive }}
-        run: |
-          if [ -n "$ARCHIVE" ]; then
-            node scripts/recuperer.js --archive "$ARCHIVE"
-          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            node scripts/recuperer.js --saison-suivante --reessayer
-          else
-            node scripts/recuperer.js
-          fi
-
-      - name: Enregistrer les matchs
-        if: steps.recup.outputs.nouveau == 'true'
-        env:
-          RESUME: ${{ steps.recup.outputs.resume }}
+          RELAIS: ${{ github.event.inputs.relais }}
+          EVENEMENT: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/auto
-          git commit -m "Matchs de la ligue : $RESUME"
-          git push || { git pull --rebase && git push; }
 
-      # Le commit du robot suffit d'habitude à republier GitHub Pages. Cette demande explicite
-      # couvre le cas contraire; un échec ici n'empêche rien.
-      - name: Republier le site
-        if: steps.recup.outputs.nouveau == 'true'
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh api -X POST "repos/${GITHUB_REPOSITORY}/pages/builds" --silent || echo "::notice::Demande de republication refusée; le commit déclenchera la publication."
+          if [ -n "$ARCHIVE" ]; then
+            premier="--archive $ARCHIVE"
+          elif [ "$EVENEMENT" = "workflow_dispatch" ] && [ -z "$RELAIS" ]; then
+            premier="--saison-suivante --reessayer"
+          else
+            premier=""
+          fi
+
+          # Soirée : de 16 h à 3 h, heure de Québec
+          soiree() { h=$(TZ=America/Toronto date +%-H); [ "$h" -ge 16 ] || [ "$h" -lt 3 ]; }
+          limite=$(( $(date +%s) + 340 * 60 ))
+          echec=0
+
+          passage() {
+            git pull -q --rebase origin "$GITHUB_REF_NAME" || git rebase --abort 2>/dev/null || true
+            # commit d'un passage précédent resté sur place (envoi refusé)
+            git push -q 2>/dev/null || true
+            sortie=$(mktemp)
+            if ! GITHUB_OUTPUT="$sortie" node scripts/recuperer.js $1; then
+              echo "::error::Échec de la récupération (voir le journal ci-dessus)."
+              echec=1
+            fi
+            if grep -q '^nouveau=true' "$sortie"; then
+              resume=$(sed -n 's/^resume=//p' "$sortie")
+              # un échec ici ne coupe pas la veille : le passage suivant repousse le commit resté sur place
+              git add data/auto && git commit -q -m "Matchs de la ligue : $resume" || true
+              if git push -q || { git pull -q --rebase origin "$GITHUB_REF_NAME" && git push -q; }; then
+                echo "Publié : $resume"
+              else
+                echo "::warning::Envoi refusé; nouvel essai au prochain passage."
+              fi
+              # Le commit du robot suffit d'habitude à republier GitHub Pages; cette demande couvre le cas contraire.
+              gh api -X POST "repos/${GITHUB_REPOSITORY}/pages/builds" --silent || echo "Demande de republication refusée; le commit déclenchera la publication."
+            fi
+            rm -f "$sortie"
+          }
+
+          passage "$premier"
+          # Import d'archive ou passage de jour : un seul passage
+          if [ -z "$ARCHIVE" ]; then
+            while soiree; do
+              if [ "$(date +%s)" -ge "$limite" ]; then
+                echo "Limite de 6 heures de GitHub en vue : la veille se relance."
+                gh workflow run matchs.yml --ref "$GITHUB_REF_NAME" -f relais=1 || echo "::warning::Relance de la veille refusée."
+                break
+              fi
+              sleep 300
+              passage ""
+            done
+          fi
+          exit $echec
