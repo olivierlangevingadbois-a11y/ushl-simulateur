@@ -91,10 +91,11 @@ Le dernier sommaire et les derniers trios utilisés sont gardés dans le navigat
 
 Le workflow `.github/workflows/matchs.yml` lance `scripts/recuperer.js` :
 
-- aux 20 minutes de 17 h à 2 h (heure de Québec, une heure plus tôt en hiver) et trois fois de jour;
+- le soir, aux 5 minutes de 16 h à 3 h (heure de Québec);
+- trois fois de jour, au cas où une simulation tomberait ailleurs;
 - à la demande : onglet **Actions**, **Matchs de la ligue**, bouton **Run workflow**, par exemple juste après une simulation.
 
-GitHub ne garantit pas l'heure des passages prévus : en période achalandée, il les retarde ou en saute (certains soirs, à peine un passage aux deux heures). Si les matchs d'une soirée n'apparaissent pas, le bouton **Run workflow** les récupère en moins d'une minute.
+GitHub saute la plupart des passages programmés (certains jours, à peine quatre). Le passage du soir reste donc ouvert : il revérifie aux 5 minutes jusqu'à 3 h et se relance lui-même avant la limite de 6 heures d'une tâche GitHub. Plusieurs passages programmés en fin d'après-midi servent à le démarrer, au cas où GitHub en sauterait. Pour savoir si la veille tourne : onglet **Actions**, un passage **Matchs de la ligue** en cours (pastille jaune). Si elle ne tourne pas et que des matchs manquent, le bouton **Run workflow** les récupère en moins d'une minute et, le soir, démarre la veille. Pendant la veille, un passage lancé à la main attend qu'elle finisse : inutile, puisqu'elle vérifie déjà aux 5 minutes.
 
 À chaque passage :
 
