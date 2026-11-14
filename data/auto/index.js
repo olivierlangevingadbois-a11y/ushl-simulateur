@@ -2,13 +2,13 @@
 window.USHL_AUTO={
  "v": 1,
  "saison": "USHL22",
- "maj": "2026-11-14T03:38:02.914Z",
+ "maj": "2026-11-14T03:53:30.286Z",
  "saisons": {
   "USHL22": {
    "base": "https://ushl.ca/ushl/menu_sim/USHL-pro/",
    "calendriers": {
     "USHL22Schedule.html": {
-     "lm": "Sat, 14 Nov 2026 03:25:26 GMT",
+     "lm": "Sat, 14 Nov 2026 03:42:14 GMT",
      "joues": 245,
      "restants": 1099
     }
